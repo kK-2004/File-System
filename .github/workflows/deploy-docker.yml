@@ -1,0 +1,162 @@
+name: Deploy Docker Branch
+
+on:
+  push:
+    branches:
+      - docker
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    env:
+      IMAGE_NAME: pfs
+      IMAGE_TAG: latest
+      IMAGE_TAR: pfs.tar.gz
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: docker
+
+      # 配置阿里云 Docker 镜像加速器
+      - name: Configure Aliyun Docker mirror
+        run: |
+          echo "Configuring Docker registry mirror..."
+          sudo mkdir -p /etc/docker
+          sudo tee /etc/docker/daemon.json <<-'EOF'
+          {
+            "registry-mirrors": ["https://hhf9u7mq.mirror.aliyuncs.com"],
+            "max-concurrent-downloads": 10,
+            "max-concurrent-uploads": 5
+          }
+          EOF
+          
+          echo "Restarting Docker..."
+          sudo systemctl restart docker
+          
+          # 等待 Docker 完全启动
+          sleep 5
+          
+          # 验证配置
+          echo "Verifying Docker mirror configuration:"
+          docker info | grep -A 5 "Registry Mirrors"
+          
+          # 测试拉取基础镜像（带重试）
+          echo "Testing base image pull..."
+          for i in {1..3}; do
+            echo "Attempt $i to pull alpine:3.20..."
+            if docker pull alpine:3.20 --quiet; then
+              echo "✅ Alpine image pulled successfully"
+              break
+            fi
+            echo "Retry $i failed, waiting 5 seconds..."
+            sleep 5
+          done
+
+      - name: Build Docker image in GitHub Actions
+        run: |
+          set -euo pipefail
+          
+          echo "Building Docker image: ${IMAGE_NAME}:${IMAGE_TAG}"
+          docker build --progress=plain -t "${IMAGE_NAME}:${IMAGE_TAG}" .
+          
+          echo "Saving image to ${IMAGE_TAR}"
+          docker save "${IMAGE_NAME}:${IMAGE_TAG}" | gzip > "${IMAGE_TAR}"
+          
+          ls -lh "${IMAGE_TAR}"
+
+      - name: Upload image and deploy on server
+        env:
+          SSH_HOST: ${{ secrets.PFS_SERVER_HOST }}
+          SSH_USER: ${{ secrets.PFS_SERVER_USER }}
+          SSH_KEY: ${{ secrets.PFS_SERVER_SSH_KEY }}
+          SSH_PORT: ${{ secrets.PFS_SERVER_PORT }}
+          DEPLOY_PATH: ${{ secrets.PFS_DEPLOY_PATH }}
+          REPO_URL: https://github.com/kK-2004/File-System.git
+          BRANCH: docker
+        run: |
+          set -euo pipefail
+
+          : "${SSH_HOST:?missing PFS_SERVER_HOST}"
+          : "${SSH_USER:?missing PFS_SERVER_USER}"
+          : "${SSH_KEY:?missing PFS_SERVER_SSH_KEY}"
+
+          SSH_PORT="${SSH_PORT:-22}"
+          DEPLOY_PATH="${DEPLOY_PATH:-pfs}"
+
+          echo "Setting up SSH..."
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/pfs_deploy_key
+          chmod 600 ~/.ssh/pfs_deploy_key
+
+          echo "Adding host to known_hosts..."
+          ssh-keyscan -p "$SSH_PORT" "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+          echo "Creating deploy directory..."
+          ssh -i ~/.ssh/pfs_deploy_key -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
+            "mkdir -p '$DEPLOY_PATH'"
+
+          echo "Uploading image to server..."
+          scp -i ~/.ssh/pfs_deploy_key -P "$SSH_PORT" \
+            "$IMAGE_TAR" \
+            "$SSH_USER@$SSH_HOST:$DEPLOY_PATH/$IMAGE_TAR"
+
+          echo "Deploying on server..."
+          ssh -i ~/.ssh/pfs_deploy_key -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
+            "DEPLOY_PATH='$DEPLOY_PATH' REPO_URL='$REPO_URL' BRANCH='$BRANCH' IMAGE_TAR='$IMAGE_TAR' bash -s" <<'REMOTE'
+          set -euo pipefail
+          
+          echo "=== Starting deployment on server ==="
+          
+          # Update or clone repository
+          if [ -d "$DEPLOY_PATH/.git" ]; then
+            echo "Repository exists, updating..."
+            cd "$DEPLOY_PATH"
+            git fetch origin "$BRANCH"
+            git checkout "$BRANCH"
+            git reset --hard "origin/$BRANCH"
+          else
+            echo "Cloning repository..."
+            rm -rf "$DEPLOY_PATH"
+            git clone --branch "$BRANCH" "$REPO_URL" "$DEPLOY_PATH"
+            cd "$DEPLOY_PATH"
+          fi
+          
+          # === 修复：停止并移除旧容器 ===
+          echo "Stopping and removing old containers..."
+          # 使用 docker compose down 停止所有相关容器
+          docker compose down --remove-orphans 2>/dev/null || true
+          # 额外清理特定名称的容器，以防万一
+          docker stop pfs 2>/dev/null && docker rm pfs 2>/dev/null || true
+          
+          # Load Docker image
+          echo "Loading Docker image..."
+          docker load < "$IMAGE_TAR"
+          
+          # Start containers
+          echo "Starting Docker Compose..."
+          docker compose up -d --no-build
+          
+          # Cleanup
+          echo "Cleaning up..."
+          rm -f "$IMAGE_TAR"
+          
+          # Prune old images (optional)
+          docker image prune -f
+          
+          # Show running containers
+          echo "=== Running containers ==="
+          docker compose ps
+          
+          echo "=== Deployment completed successfully ==="
+          REMOTE
+
+      - name: Cleanup local tarball
+        if: always()
+        run: |
+          rm -f "$IMAGE_TAR"
+          echo "Cleaned up local tarball"

@@ -143,6 +143,24 @@ docker compose pull
 docker compose up -d
 ```
 
+如果使用 GitHub Actions 自动部署 `docker` 分支，需要在仓库 Settings -> Secrets and variables -> Actions 中配置：
+
+```text
+PFS_SERVER_HOST      服务器 IP 或域名
+PFS_SERVER_USER      SSH 用户名
+PFS_SERVER_SSH_KEY   SSH 私钥
+PFS_SERVER_PORT      SSH 端口，可选，默认 22
+PFS_DEPLOY_PATH      服务器部署目录，可选，默认远程用户家目录下的 pfs
+```
+
+工作流会在 `docker` 分支有新提交时通过 SSH 进入服务器，拉取最新代码，并执行：
+
+```bash
+docker compose up -d --build
+```
+
+这种方式会直接在服务器上构建 `pfs:latest` 本地镜像，不需要再手动推送到镜像仓库。
+
 ## 支持命令
 
 ```text

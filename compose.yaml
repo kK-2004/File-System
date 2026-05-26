@@ -2,7 +2,7 @@ services:
   pfs:
     build:
       context: .
-    image: crpi-g3stl1c9yrlh5x39.cn-beijing.personal.cr.aliyuncs.com/kk09/pfs:v1.0
+    image: pfs:latest
     container_name: pfs
     restart: unless-stopped
     ports:
