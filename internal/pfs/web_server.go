@@ -26,6 +26,8 @@ import (
 //go:embed web/*
 var webFiles embed.FS
 
+var webAssetVersion = fmt.Sprintf("%d", time.Now().Unix())
+
 var terminalCommands = []string{
 	"help", "main", "pwd", "mkdir", "touch", "vim", "write", "more", "cat",
 	"cd", "cp", "mv", "rename", "tree", "ls", "ll", "stat", "detail", "rm",
@@ -184,6 +186,12 @@ func (w *webServer) routes(router *gin.Engine) {
 				writeError(c, http.StatusInternalServerError, err)
 				return
 			}
+		}
+		if name == "index.html" {
+			c.Header("Cache-Control", "no-store")
+			data = []byte(strings.ReplaceAll(string(data), "{{ASSET_VERSION}}", webAssetVersion))
+		} else {
+			c.Header("Cache-Control", "public, max-age=31536000, immutable")
 		}
 		contentType := mime.TypeByExtension(path.Ext(name))
 		if contentType == "" {
