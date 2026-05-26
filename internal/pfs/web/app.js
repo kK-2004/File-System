@@ -20,6 +20,8 @@ createApp({
         visible: false,
         filename: "",
         content: "",
+        instance: null,
+        language: "text",
       },
       userAdd: {
         active: false,
@@ -143,6 +145,7 @@ createApp({
         if (data.edit) {
           this.editor.filename = data.edit.filename;
           this.editor.content = data.edit.content || "";
+          this.editor.language = this.editorLanguage(data.edit.filename);
           this.editor.visible = true;
         } else {
           await this.focusInput();
@@ -244,6 +247,7 @@ createApp({
     async saveEditor() {
       this.loading = true;
       try {
+        this.syncEditorContent();
         const data = await this.postJSON("/api/file/save", {
           session_id: this.sessionId,
           filename: this.editor.filename,
@@ -252,6 +256,7 @@ createApp({
         if (data.pwd) this.pwd = data.pwd;
         if (data.output) this.lines.push({ type: "output", text: data.output.trimEnd() });
         this.editor.visible = false;
+        this.destroyCodeEditor();
         if (this.diskDrawer) await this.loadDiskUsage();
         await this.focusInput();
       } catch (error) {
@@ -354,6 +359,144 @@ createApp({
     blockRange(blockIds) {
       if (!blockIds || blockIds.length === 0) return "-";
       return blockIds.join(", ");
+    },
+    editorMode(filename) {
+      const ext = filename.split(".").pop().toLowerCase();
+      const modes = {
+        c: "c_cpp",
+        h: "c_cpp",
+        cpp: "c_cpp",
+        cc: "c_cpp",
+        cxx: "c_cpp",
+        hpp: "c_cpp",
+        java: "java",
+        js: "javascript",
+        json: "json",
+        ts: "typescript",
+        go: "golang",
+        py: "python",
+        sh: "sh",
+        bash: "sh",
+        md: "markdown",
+        html: "html",
+        htm: "html",
+        css: "css",
+        sql: "sql",
+        xml: "xml",
+      };
+      return modes[ext] || "text";
+    },
+    editorLanguage(filename) {
+      const ext = filename.split(".").pop().toLowerCase();
+      const languages = {
+        c: "c",
+        h: "c",
+        cpp: "cpp",
+        cc: "cpp",
+        cxx: "cpp",
+        hpp: "cpp",
+        java: "java",
+        js: "javascript",
+        json: "json",
+        ts: "typescript",
+        go: "go",
+        py: "python",
+        sh: "shell",
+        bash: "shell",
+        md: "markdown",
+        html: "html",
+        htm: "html",
+        css: "css",
+        sql: "sql",
+        xml: "xml",
+      };
+      return languages[ext] || "text";
+    },
+    editorKeywords(language) {
+      const shared = ["true", "false", "null", "return", "if", "else", "for", "while", "break", "continue"];
+      const keywords = {
+        c: ["#include", "#define", "int", "char", "float", "double", "void", "long", "short", "struct", "typedef", "sizeof", "printf", "scanf", "main"],
+        cpp: ["#include", "using", "namespace", "std", "class", "public", "private", "protected", "template", "typename", "auto", "cout", "cin", "vector", "string"],
+        java: ["class", "public", "private", "protected", "static", "final", "void", "int", "String", "new", "extends", "implements", "System", "out", "println"],
+        javascript: ["const", "let", "var", "function", "async", "await", "return", "import", "export", "from", "class", "new", "this", "console", "log", "document", "window"],
+        typescript: ["const", "let", "var", "function", "async", "await", "interface", "type", "string", "number", "boolean", "unknown", "Promise", "return"],
+        go: ["package", "import", "func", "var", "const", "type", "struct", "interface", "defer", "go", "chan", "select", "range", "map", "string", "int", "error", "nil"],
+        python: ["def", "class", "import", "from", "as", "self", "None", "True", "False", "lambda", "with", "try", "except", "finally", "print", "range"],
+        shell: ["echo", "cd", "ls", "mkdir", "rm", "cp", "mv", "cat", "grep", "find", "if", "then", "else", "fi", "for", "do", "done", "export"],
+        markdown: ["# ", "## ", "### ", "- ", "```", "[text](url)", "**bold**", "`code`"],
+        html: ["html", "head", "body", "div", "span", "script", "style", "link", "meta", "class", "id"],
+        css: ["display", "grid", "flex", "position", "color", "background", "border", "padding", "margin", "font-size", "line-height"],
+        sql: ["SELECT", "FROM", "WHERE", "INSERT", "UPDATE", "DELETE", "CREATE", "TABLE", "JOIN", "GROUP BY", "ORDER BY", "LIMIT"],
+        xml: ["xml", "version", "encoding"],
+      };
+      return [...shared, ...(keywords[language] || [])];
+    },
+    async setupCodeEditor() {
+      await nextTick();
+      if (!window.ace || !this.$refs.editorHost) return;
+      this.destroyCodeEditor();
+
+      window.ace.config.set("basePath", "https://unpkg.com/ace-builds@1.32.6/src-min-noconflict");
+      const editor = window.ace.edit(this.$refs.editorHost);
+      editor.setTheme("ace/theme/github");
+      editor.session.setMode(`ace/mode/${this.editorMode(this.editor.filename)}`);
+      editor.session.setValue(this.editor.content);
+      editor.session.setUseWrapMode(false);
+      editor.setOptions({
+        fontFamily: 'Consolas, "Cascadia Mono", "Courier New", monospace',
+        fontSize: "14px",
+        tabSize: 4,
+        useSoftTabs: true,
+        showPrintMargin: false,
+        enableBasicAutocompletion: true,
+        enableLiveAutocompletion: true,
+        enableSnippets: true,
+      });
+      editor.completers = [this.aceCompleter(), ...(window.ace.require("ace/ext/language_tools").textCompleter ? [window.ace.require("ace/ext/language_tools").textCompleter] : [])];
+      editor.on("change", () => {
+        this.editor.content = editor.getValue();
+      });
+      this.editor.instance = editor;
+
+      window.setTimeout(() => {
+        if (!this.editor.instance) return;
+        this.editor.instance.resize(true);
+        this.editor.instance.focus();
+      }, 80);
+    },
+    aceCompleter() {
+      return {
+        getCompletions: (editor, session, position, prefix, callback) => {
+          const words = new Set(this.editorKeywords(this.editor.language));
+          const content = session.getValue();
+          for (const match of content.matchAll(/[A-Za-z_#][A-Za-z0-9_#.-]{1,}/g)) {
+            words.add(match[0]);
+          }
+          const completions = [...words]
+            .filter((word) => !prefix || word.toLowerCase().startsWith(prefix.toLowerCase()))
+            .sort((left, right) => left.localeCompare(right))
+            .map((word) => ({
+              caption: word,
+              value: word,
+              meta: this.editor.language,
+              score: 1000,
+            }));
+          callback(null, completions);
+        },
+      };
+    },
+    syncEditorContent() {
+      if (this.editor.instance) {
+        this.editor.content = this.editor.instance.getValue();
+      }
+    },
+    destroyCodeEditor() {
+      if (!this.editor.instance) return;
+      this.editor.instance.destroy();
+      if (this.$refs.editorHost) {
+        this.$refs.editorHost.innerHTML = "";
+      }
+      this.editor.instance = null;
     },
     async completeCommand(event) {
       event.preventDefault();
@@ -505,19 +648,15 @@ createApp({
         v-model="editor.visible"
         :modal="false"
         :close-on-click-modal="false"
-        draggable
-        :title="'vim ' + editor.filename"
+        :title="'编辑 ' + editor.filename"
         width="min(760px, 92vw)"
+        @opened="setupCodeEditor"
+        @closed="destroyCodeEditor(); focusInput()"
+        @mousedown.stop
       >
-        <el-input
-          v-model="editor.content"
-          type="textarea"
-          :autosize="{ minRows: 14, maxRows: 24 }"
-          spellcheck="false"
-          class="editor-textarea"
-        />
+        <div ref="editorHost" class="code-editor" @mousedown.stop @click.stop @keydown.stop></div>
         <template #footer>
-          <el-button @click="editor.visible = false">取消</el-button>
+          <el-button @click="editor.visible = false; destroyCodeEditor(); focusInput()">取消</el-button>
           <el-button type="primary" :loading="loading" @click="saveEditor">保存</el-button>
         </template>
       </el-dialog>
