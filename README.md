@@ -1,6 +1,7 @@
 # File System
 
 一个使用 Go 实现的多用户、多级目录虚拟文件系统。项目通过一个本地磁盘文件保存目录、文件、用户和权限信息，命令行交互风格接近简化版 Linux shell。
+<img width="1280" height="680" alt="PixPin_2026-05-26_22-05-18" src="https://github.com/user-attachments/assets/a31bba41-46fb-4edd-9794-23871d48b517" />
 
 在 Windows、macOS、Linux 上都可以用同一套命令构建和运行。
 
