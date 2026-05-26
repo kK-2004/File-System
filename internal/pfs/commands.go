@@ -63,8 +63,9 @@ func (s *Session) write(args []string) error {
 	if err := s.canWrite(file); err != nil {
 		return err
 	}
+	content := ""
 	if len(args) > 1 {
-		file.Content = strings.Join(args[1:], " ")
+		content = strings.Join(args[1:], " ")
 	} else {
 		fmt.Fprintln(s.out, "enter text; finish with a single dot on its own line")
 		lines := []string{}
@@ -79,10 +80,9 @@ func (s *Session) write(args []string) error {
 			}
 			lines = append(lines, line)
 		}
-		file.Content = strings.Join(lines, "\n")
+		content = strings.Join(lines, "\n")
 	}
-	markChanged(file)
-	return nil
+	return s.disk.assignContent(file, content)
 }
 
 func (s *Session) more(args []string) error {
@@ -151,7 +151,10 @@ func (s *Session) cp(args []string) error {
 		return errors.New("target already contains that name")
 	}
 	copyNode := s.disk.newNode(src.Name, nodeFile, target.ID, s.currentUser.ID)
-	copyNode.Content = src.Content
+	if err := s.disk.assignContent(copyNode, src.Content); err != nil {
+		delete(s.disk.Nodes, copyNode.ID)
+		return err
+	}
 	target.Children[copyNode.Name] = copyNode.ID
 	target.Modified = now()
 	return nil
@@ -270,8 +273,8 @@ func (s *Session) ll(args []string) error {
 		return errors.New("usage: ll")
 	}
 	for _, child := range s.sortedChildren(s.cwd()) {
-		fmt.Fprintf(s.out, "%-4s %-12s owner=%d size=%d modified=%s\n",
-			child.Type, child.Name, child.OwnerID, child.size(), child.Modified.Format("2006-01-02 15:04:05"))
+		fmt.Fprintf(s.out, "%-4s %-12s owner=%d size=%d blocks=%d modified=%s\n",
+			child.Type, child.Name, child.OwnerID, child.size(), child.blocks(), child.Modified.Format("2006-01-02 15:04:05"))
 	}
 	return nil
 }
@@ -284,8 +287,9 @@ func (s *Session) stat(args []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(s.out, "id: %s\nname: %s\ntype: %s\nowner: %d\nsize: %d\ncreated: %s\naccessed: %s\nmodified: %s\n",
+	fmt.Fprintf(s.out, "id: %s\nname: %s\ntype: %s\nowner: %d\nsize: %d\nblocks: %d\nblock_ids: %v\ncreated: %s\naccessed: %s\nmodified: %s\n",
 		node.ID, node.Name, node.Type, node.OwnerID, node.size(),
+		node.blocks(), node.BlockIDs,
 		node.Created.Format(time.RFC3339), node.Accessed.Format(time.RFC3339), node.Modified.Format(time.RFC3339))
 	return nil
 }
@@ -300,8 +304,10 @@ func (s *Session) detail() {
 			files++
 		}
 	}
-	fmt.Fprintf(s.out, "File System format: %d\nusers: %d\ndirectories: %d\nfiles: %d\ndisk: %s\n",
-		s.disk.FormatVersion, len(s.disk.Users), dirs, files, s.diskPath)
+	usedBlocks := s.disk.TotalBlocks - len(s.disk.FreeBlocks)
+	fmt.Fprintf(s.out, "File System format: %d\nusers: %d\ndirectories: %d\nfiles: %d\nblock size: %d bytes\ntotal blocks: %d\nused blocks: %d\nfree blocks: %d\ndisk: %s\n",
+		s.disk.FormatVersion, len(s.disk.Users), dirs, files,
+		s.disk.BlockSize, s.disk.TotalBlocks, usedBlocks, len(s.disk.FreeBlocks), s.diskPath)
 }
 
 func (s *Session) rm(args []string) error {
@@ -341,6 +347,8 @@ func (s *Session) removeSubtree(node *Node) {
 		for _, id := range node.Children {
 			s.removeSubtree(s.disk.Nodes[id])
 		}
+	} else {
+		s.disk.releaseBlocks(node.BlockIDs)
 	}
 	delete(s.disk.Nodes, node.ID)
 }

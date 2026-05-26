@@ -50,6 +50,134 @@ func TestResolveAndPwd(t *testing.T) {
 	}
 }
 
+func TestFileContentAllocatesAndReleasesBlocks(t *testing.T) {
+	disk := newDisk()
+	session := &Session{
+		disk:        disk,
+		currentID:   disk.RootID,
+		currentUser: disk.Users[0],
+		reader:      bufio.NewReader(bytes.NewBuffer(nil)),
+		out:         &bytes.Buffer{},
+	}
+
+	initialFree := len(disk.FreeBlocks)
+	if err := session.write([]string{"a.txt", "hello"}); err != nil {
+		t.Fatal(err)
+	}
+	file, err := session.resolve("a.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := len(file.BlockIDs); got != 1 {
+		t.Fatalf("file blocks = %d, want 1", got)
+	}
+	if got := len(disk.FreeBlocks); got != initialFree-1 {
+		t.Fatalf("free blocks after write = %d, want %d", got, initialFree-1)
+	}
+
+	if err := session.write([]string{"a.txt", "hello", "again"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := len(file.BlockIDs); got != 1 {
+		t.Fatalf("file blocks after rewrite = %d, want 1", got)
+	}
+	if got := len(disk.FreeBlocks); got != initialFree-1 {
+		t.Fatalf("free blocks after rewrite = %d, want %d", got, initialFree-1)
+	}
+
+	if err := session.rm([]string{"a.txt"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := len(disk.FreeBlocks); got != initialFree {
+		t.Fatalf("free blocks after remove = %d, want %d", got, initialFree)
+	}
+}
+
+func TestWriteFailsWithoutChangingExistingFileWhenNoBlocksAvailable(t *testing.T) {
+	disk := newDisk()
+	disk.BlockSize = 4
+	disk.TotalBlocks = 1
+	disk.FreeBlocks = []int{0}
+	session := &Session{
+		disk:        disk,
+		currentID:   disk.RootID,
+		currentUser: disk.Users[0],
+		reader:      bufio.NewReader(bytes.NewBuffer(nil)),
+		out:         &bytes.Buffer{},
+	}
+
+	if err := session.write([]string{"a.txt", "data"}); err != nil {
+		t.Fatal(err)
+	}
+	file, err := session.resolve("a.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := session.write([]string{"a.txt", "datax"}); err == nil {
+		t.Fatal("write succeeded, want allocation failure")
+	}
+	if file.Content != "data" {
+		t.Fatalf("content changed after failed write: %q", file.Content)
+	}
+	if got := len(file.BlockIDs); got != 1 {
+		t.Fatalf("file blocks after failed write = %d, want 1", got)
+	}
+	if got := len(disk.FreeBlocks); got != 0 {
+		t.Fatalf("free blocks after failed write = %d, want 0", got)
+	}
+}
+
+func TestMigrateDiskReallocatesBlocks(t *testing.T) {
+	disk := newDiskWithConfig(4, 8)
+	session := &Session{
+		disk:        disk,
+		currentID:   disk.RootID,
+		currentUser: disk.Users[0],
+		reader:      bufio.NewReader(bytes.NewBuffer(nil)),
+		out:         &bytes.Buffer{},
+	}
+
+	if err := session.write([]string{"a.txt", "123456"}); err != nil {
+		t.Fatal(err)
+	}
+	migrated, err := migrateDisk(disk, 3, 8)
+	if err != nil {
+		t.Fatal(err)
+	}
+	file := migrated.Nodes[disk.Nodes[disk.RootID].Children["a.txt"]]
+	if got := len(file.BlockIDs); got != 2 {
+		t.Fatalf("migrated blocks = %d, want 2", got)
+	}
+	if migrated.BlockSize != 3 || migrated.TotalBlocks != 8 {
+		t.Fatalf("unexpected config: block_size=%d total_blocks=%d", migrated.BlockSize, migrated.TotalBlocks)
+	}
+	if got := len(migrated.FreeBlocks); got != 6 {
+		t.Fatalf("free blocks after migration = %d, want 6", got)
+	}
+}
+
+func TestMigrateDiskFailsWhenNewCapacityIsTooSmall(t *testing.T) {
+	disk := newDiskWithConfig(4, 8)
+	session := &Session{
+		disk:        disk,
+		currentID:   disk.RootID,
+		currentUser: disk.Users[0],
+		reader:      bufio.NewReader(bytes.NewBuffer(nil)),
+		out:         &bytes.Buffer{},
+	}
+
+	if err := session.write([]string{"a.txt", "123456"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := migrateDisk(disk, 3, 1); err == nil {
+		t.Fatal("migration succeeded, want capacity failure")
+	}
+	file := disk.Nodes[disk.Nodes[disk.RootID].Children["a.txt"]]
+	if got := len(file.BlockIDs); got != 2 {
+		t.Fatalf("original disk changed after failed migration: blocks=%d, want 2", got)
+	}
+}
+
 func TestLoginRetryAfterWrongPassword(t *testing.T) {
 	disk := newDisk()
 	session := &Session{

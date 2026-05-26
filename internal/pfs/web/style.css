@@ -1,0 +1,308 @@
+:root {
+  color-scheme: light;
+  font-family: Inter, "Microsoft YaHei", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: #eef1f4;
+  color: #1f2933;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+.shell-page {
+  min-height: 100vh;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 14px;
+  padding: 18px;
+  position: relative;
+  transition: padding-right 160ms ease;
+}
+
+.shell-page.with-disk-panel {
+  padding-right: 398px;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 18px;
+  border: 1px solid #d7dde3;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.topbar h1 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.topbar p {
+  margin: 5px 0 0;
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 13px;
+  color: #5b6775;
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.terminal-wrap {
+  min-height: 0;
+}
+
+.terminal {
+  height: calc(100vh - 190px);
+  min-height: 380px;
+  overflow: auto;
+  padding: 16px;
+  border-radius: 8px;
+  background: #101820;
+  color: #dbe7ef;
+  font-family: Consolas, "Cascadia Mono", "Courier New", monospace;
+  font-size: 14px;
+  line-height: 1.65;
+  border: 1px solid #243240;
+  white-space: pre-wrap;
+}
+
+.terminal-line {
+  min-height: 23px;
+}
+
+.terminal-line.system {
+  color: #8fd3ff;
+}
+
+.terminal-line.error {
+  color: #ff9f9f;
+}
+
+.terminal-line.command {
+  color: #f4f7fb;
+}
+
+.terminal-line.output {
+  color: #dbe7ef;
+}
+
+.prompt {
+  color: #83e6b1;
+  margin-right: 8px;
+  white-space: nowrap;
+}
+
+.input-row {
+  display: flex;
+  align-items: baseline;
+}
+
+.input-row input {
+  flex: 1;
+  min-width: 120px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #ffffff;
+  font: inherit;
+  caret-color: #83e6b1;
+}
+
+.suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.editor-textarea textarea {
+  font-family: Consolas, "Cascadia Mono", "Courier New", monospace;
+  line-height: 1.55;
+  resize: vertical;
+}
+
+.disk-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.disk-config {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  align-items: end;
+  padding: 12px;
+  border: 1px solid #d8e0e8;
+  border-radius: 8px;
+  background: #f7f9fb;
+}
+
+.disk-config label {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.disk-config label span {
+  color: #687586;
+  font-size: 12px;
+}
+
+.disk-config .el-input-number {
+  width: 100%;
+}
+
+.disk-config p {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: #687586;
+  font-size: 12px;
+}
+
+.disk-config p.invalid {
+  color: #d93025;
+}
+
+.disk-config .el-button {
+  grid-column: 1 / -1;
+  width: 100%;
+}
+
+.disk-side-panel {
+  position: fixed;
+  top: 18px;
+  right: 18px;
+  bottom: 18px;
+  z-index: 20;
+  width: 360px;
+  overflow: auto;
+  padding: 16px;
+  border: 1px solid #d7dde3;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 14px 36px rgba(28, 39, 51, 0.16);
+}
+
+.disk-side-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.disk-side-header h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.disk-side-header p {
+  margin: 4px 0 0;
+  color: #687586;
+  font-size: 12px;
+}
+
+.disk-side-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.disk-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.disk-stats div {
+  padding: 10px;
+  border: 1px solid #d8e0e8;
+  border-radius: 8px;
+  background: #f7f9fb;
+}
+
+.disk-stats span {
+  display: block;
+  font-size: 12px;
+  color: #687586;
+}
+
+.disk-stats strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 18px;
+  color: #1f2933;
+}
+
+.block-strip {
+  display: grid;
+  grid-template-columns: repeat(32, 1fr);
+  gap: 3px;
+  padding: 10px;
+  border: 1px solid #d8e0e8;
+  border-radius: 8px;
+  background: #f7f9fb;
+  max-height: 170px;
+  overflow: auto;
+}
+
+.block-strip span {
+  aspect-ratio: 1;
+  min-width: 5px;
+  border-radius: 2px;
+  background: #d7dee7;
+}
+
+.block-strip span.used {
+  background: #409eff;
+}
+
+@media (max-width: 720px) {
+  .shell-page {
+    padding: 12px;
+  }
+
+  .shell-page.with-disk-panel {
+    padding-right: 12px;
+  }
+
+  .topbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .terminal {
+    height: calc(100vh - 240px);
+    font-size: 13px;
+  }
+
+  .topbar-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .disk-side-panel {
+    left: 12px;
+    right: 12px;
+    top: 92px;
+    bottom: 12px;
+    width: auto;
+  }
+
+  .input-row {
+    display: block;
+  }
+
+  .prompt {
+    display: block;
+  }
+}

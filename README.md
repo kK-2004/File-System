@@ -6,22 +6,64 @@
 
 ## 运行
 
+PowerShell:
+
+```powershell
+.\launch.ps1
+go run ./cmd/pfs init
+go run ./cmd/pfs run
+go run ./cmd/pfs web
+go run ./cmd/pfs
+```
+
+Git Bash、WSL、Linux 或 macOS:
+
 ```bash
 ./launch.sh
 go run ./cmd/pfs init
 go run ./cmd/pfs run
+go run ./cmd/pfs web
 go run ./cmd/pfs
 ```
 
 不带参数时默认进入 `run`。如果当前目录还没有 `fms.pfs`，程序会自动初始化磁盘后再进入登录流程。
 
-如果希望一键启动，也可以直接运行：
+如果希望一键启动，PowerShell 下可以直接运行：
+
+```powershell
+.\launch.ps1
+```
+
+Git Bash、WSL、Linux 或 macOS 下可以直接运行：
 
 ```bash
 ./launch.sh
 ```
 
-`launch.sh` 会直接调用 `go run ./cmd/pfs`，这样每次启动都会使用当前源码版本。
+启动脚本会直接调用 `go run ./cmd/pfs`，这样每次启动都会使用当前源码版本。
+
+如果要使用浏览器终端：
+
+```powershell
+go run ./cmd/pfs web
+```
+
+启动后访问：
+
+```text
+http://127.0.0.1:8080
+```
+
+浏览器终端使用 Vue3 + Element Plus 实现，后端使用 Gin。前端静态文件会嵌入到 Go 程序中，由同一个 Gin 服务托管，所以只需要启动后端并访问一个端口。终端支持命令历史、Tab 补全、vim 弹窗编辑和磁盘块空间侧边栏。后端通过 WebSocket 推送磁盘和用户变化事件，前端会实时刷新状态。默认登录账号仍然是 `root` / `root`。
+
+初始化或启动时可以指定磁盘块参数：
+
+```powershell
+go run ./cmd/pfs init -block-size 64 -total-blocks 1024
+go run ./cmd/pfs web -block-size 128 -total-blocks 2048
+```
+
+如果磁盘文件已经存在，`run` 或 `web` 启动时传入新的块参数会自动迁移磁盘：先按新参数生成新磁盘文件，迁移成功后切换到新文件并删除旧文件。Web 终端的磁盘块侧边栏也支持 root 用户在线调整参数。
 
 如果要指定磁盘文件：
 
