@@ -1,0 +1,12 @@
+.git
+.gitignore
+Dockerfile
+README.md
+docs
+*.pfs
+*.pfs.new
+pfs
+pfs.exe
+tmp
+dist
+node_modules

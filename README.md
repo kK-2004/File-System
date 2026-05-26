@@ -93,6 +93,56 @@ Windows 可以构建为：
 go build -o pfs.exe ./cmd/pfs
 ```
 
+## Docker
+
+构建镜像：
+
+```bash
+docker build -t pfs:latest .
+```
+
+运行 Web 终端：
+
+```bash
+docker compose up -d --build
+```
+
+启动后访问：
+
+```text
+http://127.0.0.1:8086
+```
+
+容器默认执行：
+
+```text
+pfs web -addr 0.0.0.0:8086 -disk /data/fms.pfs
+```
+
+如果镜像已经推送到镜像仓库，可以把 `compose.yaml` 中的 `image` 改为仓库地址，并删除 `build`：
+
+```yaml
+services:
+  pfs:
+    image: your-registry.example.com/pfs:latest
+    container_name: pfs
+    restart: unless-stopped
+    ports:
+      - "8086:8086"
+    volumes:
+      - pfs-data:/data
+
+volumes:
+  pfs-data:
+```
+
+服务器部署：
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
 ## 支持命令
 
 ```text

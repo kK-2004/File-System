@@ -1,0 +1,14 @@
+services:
+  pfs:
+    build:
+      context: .
+    image: crpi-g3stl1c9yrlh5x39.cn-beijing.personal.cr.aliyuncs.com/kk09/pfs:v1.0
+    container_name: pfs
+    restart: unless-stopped
+    ports:
+      - "8086:8086"
+    volumes:
+      - pfs-data:/data
+
+volumes:
+  pfs-data:
